@@ -1,0 +1,65 @@
+version: '3.3'
+
+services:
+    tracking-db:
+        restart: always
+        image: ${MYSQL_IMAGE}
+        container_name: mlflow_tracking_db
+        expose:
+            - "3306"
+        networks:
+            - backend
+        environment:
+            - MYSQL_DATABASE=${MYSQL_TRACKING_DATABASE}
+            - MYSQL_USER=${MYSQL_TRACKING_USER}
+            - MYSQL_PASSWORD=${MYSQL_TRACKING_PASSWORD}
+            - MYSQL_ROOT_PASSWORD=${MYSQL_TRACKING_ROOT_PASSWORD}
+        volumes:
+            - ${MYSQL_TRACKING_VOLUME}:/var/lib/mysql
+    # originally just had 2 mysql containers but backend for auth uses entirely seperate code and was running into an unresolved bug with mysql backend
+    auth-db:
+        restart: always
+        image: ${POSTGRESQL_IMAGE}
+        container_name: mlflow_auth_db
+        expose:
+            - "5432"
+        networks:
+            - backend
+        environment:
+            - POSTGRES_DB=${AUTH_DB_DATABASE}
+            - POSTGRES_USER=${AUTH_DB_USER}
+            - POSTGRES_PASSWORD=${AUTH_DB_PASSWORD}
+        volumes:
+            - ${AUTH_DB_VOLUME}:/var/lib/mysql
+
+    web:
+        restart: always
+        build:
+          context: .
+        image: mlflow_server
+        container_name: mlflow_server
+        expose:
+            - "5000"
+        networks:
+            - traefik
+            - backend
+        environment:
+            - MLFLOW_AUTH_CONFIG_PATH=/auth_config.ini
+        command: mlflow server --app-name basic-auth --backend-store-uri mysql+pymysql://${MYSQL_TRACKING_USER}:${MYSQL_TRACKING_PASSWORD}@tracking-db:3306/${MYSQL_TRACKING_DATABASE} --default-artifact-root /mnt/mlflow-artifacts --host 0.0.0.0 --gunicorn-opts "--log-level debug"
+        volumes:
+            - ${MLFLOW_ARTIFACTS_VOLUME}:/mnt/mlflow-artifacts
+            - ${PWD}/.auth_config.ini:/auth_config.ini
+        labels:
+            - "traefik.enable=true"
+            - "traefik.docker.network=traefik"
+            - "traefik.http.routers.mlflowpublic.rule=Host(`${MLFLOW_FQDN}`)"
+            - "traefik.http.routers.mlflowpublic.service=mlflow"
+            - "traefik.http.routers.mlflowprivate.rule=Host(`${MLFLOW_PRIVATE_FQDN}`)"
+            - "traefik.http.routers.mlflowprivate.service=mlflow"
+            - "traefik.http.services.mlflow.loadbalancer.server.port=5000"
+
+networks:
+    traefik:
+      external: true
+    backend:
+        driver: bridge
