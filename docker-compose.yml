@@ -45,10 +45,11 @@ services:
             - backend
         environment:
             - MLFLOW_AUTH_CONFIG_PATH=/auth_config.ini
+            - MLFLOW_LOGGING_LEVEL=DEBUG
         command: mlflow server --app-name basic-auth --backend-store-uri mysql+pymysql://${MYSQL_TRACKING_USER}:${MYSQL_TRACKING_PASSWORD}@tracking-db:3306/${MYSQL_TRACKING_DATABASE} --default-artifact-root /mnt/mlflow-artifacts --host 0.0.0.0 --gunicorn-opts "--log-level debug"
         volumes:
             - ${MLFLOW_ARTIFACTS_VOLUME}:/mnt/mlflow-artifacts
-            - ${PWD}/.auth_config.ini:/auth_config.ini
+            - ./.auth_config.ini:/auth_config.ini
         labels:
             - "traefik.enable=true"
             - "traefik.docker.network=traefik"
